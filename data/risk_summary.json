@@ -1,0 +1,17 @@
+{
+  "total_locations": 418,
+  "total_prediction_records": 1154,
+  "warnings": 382,
+  "no_warnings": 772,
+  "risk_counts": {
+    "LOW": 742,
+    "MODERATE": 30,
+    "HIGH": 43,
+    "CRITICAL": 339
+  },
+  "max_landslide_probability": 1.0,
+  "mean_landslide_probability": 0.3425270925494596,
+  "operating_threshold": 0.47,
+  "model_name": "Random Forest",
+  "prediction_timestamp_utc": "2026-09-07T18:25:08.559061+00:00"
+}
