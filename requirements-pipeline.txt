@@ -1,0 +1,13 @@
+# --- Used only by the Phase 9/11 prediction pipeline (generate_predictions.py,
+# fetch_rainfall.py, compute_features.py) — NOT needed by the deployed app.py
+# dashboard, which only reads the pipeline's output CSV/JSON files. ---
+
+pandas>=2.0,<3.0
+scikit-learn==1.6.1  # MUST match the version the artifact was pickled with.
+                     # A newer version throws:
+                     # AttributeError: 'SimpleImputer' object has no attribute '_fill_dtype'
+                     # If you ever retrain and re-save the artifact with a newer
+                     # scikit-learn, bump this to match — always keep it pinned,
+                     # never left unconstrained.
+joblib>=1.3,<2.0
+requests>=2.31,<3.0  # Open-Meteo fetch in fetch_rainfall.py
