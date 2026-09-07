@@ -1,0 +1,35 @@
+name: Phase 11 Live Rainfall + Prediction Update
+
+on:
+  schedule:
+    # Runs hourly, at minute 5 (avoids the exact top-of-hour crowd on GitHub's scheduler).
+    # Matches the hourly cadence recommended in pipeline.py's scheduling note,
+    # since Open-Meteo's "today" total is provisional until the day ends.
+    - cron: "5 * * * *"
+  workflow_dispatch: {}  # lets you trigger a run manually from the Actions tab
+
+jobs:
+  update-predictions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Phase 11 pipeline + generate predictions
+        run: python generate_predictions.py
+
+      - name: Commit and push updated data files
+        run: |
+          git config user.name "phase11-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/ phase11_grid_rainfall_daily_log.csv phase11_missing_data_report.csv 2>/dev/null || true
+          git diff --cached --quiet && echo "No changes to commit" || git commit -m "Phase 11: automated rainfall + prediction update"
+          git push
