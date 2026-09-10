@@ -46,6 +46,12 @@ RISK_COLORS = {
     "CRITICAL": "#e74c3c",
 }
 
+# Any gap between two consecutive dated records for the same location that is
+# wider than this (in days) is treated as "not continuous monitoring" and is
+# visually broken / shaded in the Historical Trends chart, instead of being
+# smoothed over by Plotly's default straight-line interpolation.
+TREND_GAP_THRESHOLD_DAYS = 30
+
 REQUIRED_COLUMNS = [
     "location_id", "date", "latitude", "longitude",
     "elevation_m", "slope_deg",
@@ -144,6 +150,45 @@ def get_operating_threshold(latest_df: pd.DataFrame, summary: dict) -> float:
 def ordered_risk_counts(df: pd.DataFrame) -> pd.Series:
     counts = df["risk_level"].value_counts()
     return counts.reindex(RISK_ORDER, fill_value=0)
+
+
+def find_trend_gaps(dates: pd.Series, threshold_days: int = TREND_GAP_THRESHOLD_DAYS):
+    """Given a sorted, deduped Series of dates for one location, return a list
+    of (gap_start, gap_end) tuples for every consecutive pair whose spacing
+    exceeds threshold_days. Used to keep the trend line from silently
+    interpolating across long stretches with no real monitoring data
+    (e.g. the jump from historical Phase 4 training dates to the first live
+    Phase 11 prediction)."""
+    gaps = []
+    dates = dates.dropna().sort_values().reset_index(drop=True)
+    if len(dates) < 2:
+        return gaps
+    diffs = dates.diff()
+    for i in range(1, len(dates)):
+        if pd.notna(diffs.iloc[i]) and diffs.iloc[i] > pd.Timedelta(days=threshold_days):
+            gaps.append((dates.iloc[i - 1], dates.iloc[i]))
+    return gaps
+
+
+def build_gap_broken_trend(loc_history: pd.DataFrame, threshold_days: int = TREND_GAP_THRESHOLD_DAYS):
+    """Return (plot_df, gaps) where plot_df has a None/NaN row inserted at
+    every detected gap so Plotly draws a break in the line instead of a
+    straight interpolated segment across it. loc_history must already be
+    sorted by date and contain 'date' and 'landslide_probability'."""
+    working = loc_history[["date", "landslide_probability"]].dropna(subset=["date"]).copy()
+    gaps = find_trend_gaps(working["date"], threshold_days=threshold_days)
+
+    if not gaps:
+        return working, gaps
+
+    # Insert a break row just after each gap's start date. A None y-value
+    # tells Plotly to lift the pen rather than connect the two real points.
+    break_rows = pd.DataFrame({
+        "date": [gap_start + pd.Timedelta(hours=12) for gap_start, _ in gaps],
+        "landslide_probability": [None] * len(gaps),
+    })
+    plot_df = pd.concat([working, break_rows], ignore_index=True).sort_values("date").reset_index(drop=True)
+    return plot_df, gaps
 
 
 # --------------------------------------------------------------------------
@@ -389,16 +434,49 @@ with tabs[4]:
     if len(loc_history) == 0:
         st.info("No historical records found for this location.")
     else:
+        # Break the line across any gap wider than TREND_GAP_THRESHOLD_DAYS so
+        # Plotly doesn't draw a misleading straight-line interpolation between,
+        # e.g., historical Phase 4 training dates and the first live Phase 11
+        # prediction. See build_gap_broken_trend() / find_trend_gaps() above.
+        plot_df, gaps = build_gap_broken_trend(loc_history, TREND_GAP_THRESHOLD_DAYS)
+
+        if gaps:
+            gap_word = "gap" if len(gaps) == 1 else "gaps"
+            st.warning(
+                f"⚠️ This location has {len(gaps)} data {gap_word} of more than "
+                f"{TREND_GAP_THRESHOLD_DAYS} days with no recorded predictions "
+                "(shaded below). The line is broken across each gap so it isn't "
+                "mistaken for continuous monitoring — it most likely reflects the "
+                "jump from historical replay data to live daily predictions."
+            )
+
         fig_trend = go.Figure()
         fig_trend.add_trace(
             go.Scatter(
-                x=loc_history["date"],
-                y=loc_history["landslide_probability"],
+                x=plot_df["date"],
+                y=plot_df["landslide_probability"],
                 mode="lines+markers",
                 name="Landslide Probability",
                 line=dict(color="#3498db"),
+                connectgaps=False,  # respect the None rows inserted at gaps
             )
         )
+
+        # Shade each detected gap region so it's visually obvious even before
+        # reading the warning text above.
+        for gap_start, gap_end in gaps:
+            fig_trend.add_vrect(
+                x0=gap_start,
+                x1=gap_end,
+                fillcolor="gray",
+                opacity=0.15,
+                line_width=0,
+                annotation_text="no data",
+                annotation_position="top left",
+                annotation_font_size=10,
+                annotation_font_color="gray",
+            )
+
         if OPERATING_THRESHOLD is not None:
             fig_trend.add_hline(
                 y=OPERATING_THRESHOLD,
