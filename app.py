@@ -339,7 +339,7 @@ with tabs[1]:
             height=600,
         )
         
-       # Apply free Esri satellite imagery + Location Labels (Hybrid View)
+        # Apply free Esri satellite imagery + Location Labels (Hybrid View)
         fig_map.update_layout(
             mapbox_style="white-bg",
             mapbox_layers=[
@@ -364,6 +364,9 @@ with tabs[1]:
             ],
             margin=dict(l=0, r=0, t=0, b=0)
         )
+        
+        # ACTUALLY RENDER THE MAP (This line was missing!)
+        st.plotly_chart(fig_map, use_container_width=True)
 
 # --------------------------------------------------------------------------
 # SECTION 3 — WARNING CENTER
@@ -743,7 +746,6 @@ with tabs[7]:
                 st.subheader(f"Simulation Results: {warnings_triggered:,} Warnings Triggered")
                 
                 # Render the simulated map
-                # Render the simulated map
                 fig_sim_map = px.scatter_mapbox(
                     sim_df,
                     lat="latitude",
@@ -767,28 +769,31 @@ with tabs[7]:
                     height=600,
                 )
                 
-             # Apply free Esri satellite imagery + Location Labels (Hybrid View)
-        fig_map.update_layout(
-            mapbox_style="white-bg",
-            mapbox_layers=[
-                # Base Layer: Satellite Imagery
-                {
-                    "below": 'traces',
-                    "sourcetype": "raster",
-                    "sourceattribution": "Esri Satellite",
-                    "source": [
-                        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                    ]
-                },
-                # Overlay Layer: Location Names & Boundaries
-                {
-                    "below": 'traces',
-                    "sourcetype": "raster",
-                    "sourceattribution": "Esri Labels",
-                    "source": [
-                        "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
-                    ]
-                }
-            ],
-            margin=dict(l=0, r=0, t=0, b=0)
-        )
+                # Apply free Esri satellite imagery + Location Labels (Hybrid View) - NOW UPDATES fig_sim_map
+                fig_sim_map.update_layout(
+                    mapbox_style="white-bg",
+                    mapbox_layers=[
+                        # Base Layer: Satellite Imagery
+                        {
+                            "below": 'traces',
+                            "sourcetype": "raster",
+                            "sourceattribution": "Esri Satellite",
+                            "source": [
+                                "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                            ]
+                        },
+                        # Overlay Layer: Location Names & Boundaries
+                        {
+                            "below": 'traces',
+                            "sourcetype": "raster",
+                            "sourceattribution": "Esri Labels",
+                            "source": [
+                                "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+                            ]
+                        }
+                    ],
+                    margin=dict(l=0, r=0, t=0, b=0)
+                )
+
+                # ACTUALLY RENDER THE MAP (This line was also missing!)
+                st.plotly_chart(fig_sim_map, use_container_width=True)
