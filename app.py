@@ -337,9 +337,23 @@ with tabs[1]:
             },
             zoom=9,
             height=600,
-            mapbox_style="open-street-map",
         )
-        fig_map.update_layout(margin=dict(l=0, r=0, t=0, b=0))
+        
+        # Apply free Esri satellite imagery
+        fig_map.update_layout(
+            mapbox_style="white-bg",
+            mapbox_layers=[
+                {
+                    "below": 'traces',
+                    "sourcetype": "raster",
+                    "sourceattribution": "Esri",
+                    "source": [
+                        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                    ]
+                }
+            ],
+            margin=dict(l=0, r=0, t=0, b=0)
+        )
         st.plotly_chart(fig_map, use_container_width=True)
 
 # --------------------------------------------------------------------------
@@ -720,6 +734,7 @@ with tabs[7]:
                 st.subheader(f"Simulation Results: {warnings_triggered:,} Warnings Triggered")
                 
                 # Render the simulated map
+                # Render the simulated map
                 fig_sim_map = px.scatter_mapbox(
                     sim_df,
                     lat="latitude",
@@ -741,7 +756,21 @@ with tabs[7]:
                     },
                     zoom=9,
                     height=600,
-                    mapbox_style="open-street-map",
                 )
-                fig_sim_map.update_layout(margin=dict(l=0, r=0, t=0, b=0))
+                
+                # Apply free Esri satellite imagery
+                fig_sim_map.update_layout(
+                    mapbox_style="white-bg",
+                    mapbox_layers=[
+                        {
+                            "below": 'traces',
+                            "sourcetype": "raster",
+                            "sourceattribution": "Esri",
+                            "source": [
+                                "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                            ]
+                        }
+                    ],
+                    margin=dict(l=0, r=0, t=0, b=0)
+                )
                 st.plotly_chart(fig_sim_map, use_container_width=True)
