@@ -594,7 +594,7 @@ with tabs[6]:
 # --------------------------------------------------------------------------
 with tabs[7]:
     st.subheader("🧪 What-If Landslide Prediction")
-    st.markdown("Test manual scenarios or override existing location data against the trained model.")
+    st.markdown("Test manual scenarios or stress-test the entire map against the trained model.")
 
     # Load the model exactly as the pipeline does
     try:
@@ -606,71 +606,142 @@ with tabs[7]:
         st.error(f"Could not load model artifact: {e}")
         st.stop()
 
-    # Location Pre-fill System
-    st.markdown("#### Input Parameters")
-    use_existing = st.checkbox("Pre-fill terrain from an existing location", value=False)
-    
-    default_elev = 500.0
-    default_slope = 25.0
-    
-    if use_existing:
-        whatif_locs = sorted(latest_df["location_id"].unique())
-        chosen_loc = st.selectbox("Select Location to Pre-fill", whatif_locs)
-        loc_data = latest_df[latest_df["location_id"] == chosen_loc].iloc[0]
-        default_elev = float(loc_data["elevation_m"])
-        default_slope = float(loc_data["slope_deg"])
-        st.info(f"Loaded terrain values for {chosen_loc}")
+    sim_mode = st.radio(
+        "Select Simulation Mode:", 
+        ["📍 Single Location Check", "🗺️ Global Map Scenario"], 
+        horizontal=True
+    )
+    st.divider()
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("**Terrain Features**")
-        elevation = st.number_input("Elevation (m)", min_value=0.0, value=default_elev, step=10.0)
-        slope = st.number_input("Slope (degrees)", min_value=0.0, max_value=90.0, value=default_slope, step=1.0)
-
-    with col2:
-        st.markdown("**Rainfall Features**")
-        st.caption(f"Thresholds: Rainy day ≥ {RAINY_DAY_THRESHOLD_MM}mm | Heavy rain ≥ {HEAVY_RAIN_DAY_THRESHOLD_MM}mm")
+    if sim_mode == "📍 Single Location Check":
+        # Location Pre-fill System
+        st.markdown("#### Input Parameters")
+        use_existing = st.checkbox("Pre-fill terrain from an existing location", value=False)
         
-        rainfall_today = st.number_input("Today's Rainfall (mm)", min_value=0.0, value=0.0, step=1.0)
+        default_elev = 500.0
+        default_slope = 25.0
         
-        # Manual streak inputs
-        consecutive_rainy = st.number_input("Consecutive Rainy Days (Ending Today)", min_value=0, value=0, step=1)
-        consecutive_heavy = st.number_input("Consecutive Heavy Rain Days (Ending Today)", min_value=0, value=0, step=1)
+        if use_existing:
+            whatif_locs = sorted(latest_df["location_id"].unique())
+            chosen_loc = st.selectbox("Select Location to Pre-fill", whatif_locs)
+            loc_data = latest_df[latest_df["location_id"] == chosen_loc].iloc[0]
+            default_elev = float(loc_data["elevation_m"])
+            default_slope = float(loc_data["slope_deg"])
+            st.info(f"Loaded terrain values for {chosen_loc}")
 
-    if st.button("Generate Prediction", type="primary", key="whatif_btn"):
-        # Build a single-row dataframe matching the exact feature order
-        input_data = {
-            "elevation_m": elevation,
-            "slope_deg": slope,
-            "rainfall_mm": rainfall_today,
-            "rainfall_1d_mm": rainfall_today,  # Identical in your setup
-            "consecutive_rainy_days": consecutive_rainy,
-            "consecutive_heavy_rain_days": consecutive_heavy
-        }
-        
-        # Ensure missing features are caught if the artifact expects more
-        missing_feats = [f for f in features_list if f not in input_data]
-        if missing_feats:
-            st.error(f"Missing input for required features: {missing_feats}")
-        else:
-            df_input = pd.DataFrame([input_data])[features_list]
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**Terrain Features**")
+            elevation = st.number_input("Elevation (m)", min_value=0.0, value=default_elev, step=10.0)
+            slope = st.number_input("Slope (degrees)", min_value=0.0, max_value=90.0, value=default_slope, step=1.0)
+
+        with col2:
+            st.markdown("**Rainfall Features**")
+            st.caption(f"Thresholds: Rainy day ≥ {RAINY_DAY_THRESHOLD_MM}mm | Heavy rain ≥ {HEAVY_RAIN_DAY_THRESHOLD_MM}mm")
             
-            # Predict
-            probability = model.predict_proba(df_input)[:, 1][0]
-            risk_label = assign_risk_level(probability)
-            is_warning = probability >= artifact_threshold
+            rainfall_today = st.number_input("Today's Rainfall (mm)", min_value=0.0, value=0.0, step=1.0)
+            consecutive_rainy = st.number_input("Consecutive Rainy Days (Ending Today)", min_value=0, value=0, step=1)
+            consecutive_heavy = st.number_input("Consecutive Heavy Rain Days (Ending Today)", min_value=0, value=0, step=1)
+
+        if st.button("Generate Prediction", type="primary", key="whatif_single_btn"):
+            input_data = {
+                "elevation_m": elevation,
+                "slope_deg": slope,
+                "rainfall_mm": rainfall_today,
+                "rainfall_1d_mm": rainfall_today, 
+                "consecutive_rainy_days": consecutive_rainy,
+                "consecutive_heavy_rain_days": consecutive_heavy
+            }
             
-            # Display Results
-            st.divider()
-            st.subheader("Prediction Results")
+            missing_feats = [f for f in features_list if f not in input_data]
+            if missing_feats:
+                st.error(f"Missing input for required features: {missing_feats}")
+            else:
+                df_input = pd.DataFrame([input_data])[features_list]
+                
+                probability = model.predict_proba(df_input)[:, 1][0]
+                risk_label = assign_risk_level(probability)
+                is_warning = probability >= artifact_threshold
+                
+                st.divider()
+                st.subheader("Prediction Results")
+                
+                metric_col1, metric_col2, metric_col3 = st.columns(3)
+                metric_col1.metric("Landslide Probability", f"{probability * 100:.1f}%", f"{probability:.3f} raw")
+                metric_col2.metric("Risk Level", risk_label)
+                metric_col3.metric(
+                    "System Action", 
+                    "🚨 WARNING" if is_warning else "✅ NO WARNING",
+                    delta="Over Threshold" if is_warning else "Safe",
+                    delta_color="inverse" if is_warning else "normal"
+                )
+
+    else:
+        st.markdown("#### Global Rainfall Scenario")
+        st.markdown(
+            "Apply a single hypothetical rainfall scenario to **all monitored locations** "
+            "to see which terrains would trigger a warning under these conditions."
+        )
+
+        sim_col1, sim_col2, sim_col3 = st.columns(3)
+        sim_rainfall = sim_col1.number_input("Simulated Today's Rainfall (mm)", min_value=0.0, value=60.0, step=10.0)
+        sim_rainy = sim_col2.number_input("Simulated Consecutive Rainy Days", min_value=0, value=3, step=1)
+        sim_heavy = sim_col3.number_input("Simulated Consecutive Heavy Rain Days", min_value=0, value=1, step=1)
+
+        if st.button("Simulate Map Risk", type="primary", key="whatif_map_btn"):
+            # Extract real terrain data for all locations
+            sim_df = latest_df[['location_id', 'latitude', 'longitude', 'elevation_m', 'slope_deg']].copy()
             
-            metric_col1, metric_col2, metric_col3 = st.columns(3)
-            metric_col1.metric("Landslide Probability", f"{probability * 100:.1f}%", f"{probability:.3f} raw")
-            metric_col2.metric("Risk Level", risk_label)
-            metric_col3.metric(
-                "System Action", 
-                "🚨 WARNING" if is_warning else "✅ NO WARNING",
-                delta="Over Threshold" if is_warning else "Safe",
-                delta_color="inverse" if is_warning else "normal"
-            )
+            # Inject the hypothetical rainfall universally
+            sim_df['rainfall_mm'] = sim_rainfall
+            sim_df['rainfall_1d_mm'] = sim_rainfall
+            sim_df['consecutive_rainy_days'] = sim_rainy
+            sim_df['consecutive_heavy_rain_days'] = sim_heavy
+            
+            missing_feats = [f for f in features_list if f not in sim_df.columns]
+            if missing_feats:
+                st.error(f"Missing input for required features: {missing_feats}")
+            else:
+                X_sim = sim_df[features_list]
+                sim_probs = model.predict_proba(X_sim)[:, 1]
+                
+                sim_df['landslide_probability'] = sim_probs
+                sim_df['probability_percent'] = sim_probs * 100
+                sim_df['risk_level'] = sim_df['landslide_probability'].apply(assign_risk_level)
+                
+                # Apply production threshold
+                sim_df['is_warning'] = sim_probs >= artifact_threshold
+                sim_df['warning_status'] = sim_df['is_warning'].map({True: "WARNING", False: "NO_WARNING"})
+                
+                warnings_triggered = sim_df['is_warning'].sum()
+                
+                st.divider()
+                st.subheader(f"Simulation Results: {warnings_triggered:,} Warnings Triggered")
+                
+                # Render the simulated map
+                fig_sim_map = px.scatter_mapbox(
+                    sim_df,
+                    lat="latitude",
+                    lon="longitude",
+                    color="risk_level",
+                    color_discrete_map=RISK_COLORS,
+                    category_orders={"risk_level": RISK_ORDER},
+                    size="probability_percent",
+                    size_max=18,
+                    hover_data={
+                        "location_id": True,
+                        "landslide_probability": ":.3f",
+                        "risk_level": True,
+                        "warning_status": True,
+                        "elevation_m": ":.1f",
+                        "slope_deg": ":.2f",
+                        "latitude": False,
+                        "longitude": False,
+                    },
+                    zoom=9,
+                    height=600,
+                    mapbox_style="open-street-map",
+                )
+                fig_sim_map.update_layout(margin=dict(l=0, r=0, t=0, b=0))
+                st.plotly_chart(fig_sim_map, use_container_width=True)
