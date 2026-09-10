@@ -8,7 +8,7 @@ IMPORTANT — this dashboard NEVER:
   - retrains the ML model
   - modifies model predictions or probabilities
   - regenerates rainfall features
-  - fabricates or simulates data
+  - fabricates or simulates data (except in the isolated What-If sandbox)
 
 It only reads and displays the three provided Phase 9 output files:
   data/latest_location_risk.csv
@@ -23,6 +23,10 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+
+# --- Pipeline Integration for What-If Analysis ---
+from generate_predictions import load_artifact, assign_risk_level, MODEL_ARTIFACT_PATH
+from config import RAINY_DAY_THRESHOLD_MM, HEAVY_RAIN_DAY_THRESHOLD_MM
 
 # --------------------------------------------------------------------------
 # PAGE CONFIG
@@ -245,6 +249,7 @@ tabs = st.tabs([
     "📈 Historical Trends",
     "📉 Analytics",
     "ℹ️ System Info",
+    "🧪 What-If Analysis"  # NEW TAB ADDED HERE
 ])
 
 # --------------------------------------------------------------------------
@@ -583,3 +588,89 @@ with tabs[6]:
         "Phase 10 Interactive Dashboard",
         language=None,
     )
+
+# --------------------------------------------------------------------------
+# SECTION 8 — WHAT-IF ANALYSIS (NEW)
+# --------------------------------------------------------------------------
+with tabs[7]:
+    st.subheader("🧪 What-If Landslide Prediction")
+    st.markdown("Test manual scenarios or override existing location data against the trained model.")
+
+    # Load the model exactly as the pipeline does
+    try:
+        artifact = load_artifact(MODEL_ARTIFACT_PATH)
+        model = artifact["model"]
+        features_list = artifact["features"]
+        artifact_threshold = artifact["operating_threshold"]
+    except Exception as e:
+        st.error(f"Could not load model artifact: {e}")
+        st.stop()
+
+    # Location Pre-fill System
+    st.markdown("#### Input Parameters")
+    use_existing = st.checkbox("Pre-fill terrain from an existing location", value=False)
+    
+    default_elev = 500.0
+    default_slope = 25.0
+    
+    if use_existing:
+        whatif_locs = sorted(latest_df["location_id"].unique())
+        chosen_loc = st.selectbox("Select Location to Pre-fill", whatif_locs)
+        loc_data = latest_df[latest_df["location_id"] == chosen_loc].iloc[0]
+        default_elev = float(loc_data["elevation_m"])
+        default_slope = float(loc_data["slope_deg"])
+        st.info(f"Loaded terrain values for {chosen_loc}")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**Terrain Features**")
+        elevation = st.number_input("Elevation (m)", min_value=0.0, value=default_elev, step=10.0)
+        slope = st.number_input("Slope (degrees)", min_value=0.0, max_value=90.0, value=default_slope, step=1.0)
+
+    with col2:
+        st.markdown("**Rainfall Features**")
+        st.caption(f"Thresholds: Rainy day ≥ {RAINY_DAY_THRESHOLD_MM}mm | Heavy rain ≥ {HEAVY_RAIN_DAY_THRESHOLD_MM}mm")
+        
+        rainfall_today = st.number_input("Today's Rainfall (mm)", min_value=0.0, value=0.0, step=1.0)
+        
+        # Manual streak inputs
+        consecutive_rainy = st.number_input("Consecutive Rainy Days (Ending Today)", min_value=0, value=0, step=1)
+        consecutive_heavy = st.number_input("Consecutive Heavy Rain Days (Ending Today)", min_value=0, value=0, step=1)
+
+    if st.button("Generate Prediction", type="primary", key="whatif_btn"):
+        # Build a single-row dataframe matching the exact feature order
+        input_data = {
+            "elevation_m": elevation,
+            "slope_deg": slope,
+            "rainfall_mm": rainfall_today,
+            "rainfall_1d_mm": rainfall_today,  # Identical in your setup
+            "consecutive_rainy_days": consecutive_rainy,
+            "consecutive_heavy_rain_days": consecutive_heavy
+        }
+        
+        # Ensure missing features are caught if the artifact expects more
+        missing_feats = [f for f in features_list if f not in input_data]
+        if missing_feats:
+            st.error(f"Missing input for required features: {missing_feats}")
+        else:
+            df_input = pd.DataFrame([input_data])[features_list]
+            
+            # Predict
+            probability = model.predict_proba(df_input)[:, 1][0]
+            risk_label = assign_risk_level(probability)
+            is_warning = probability >= artifact_threshold
+            
+            # Display Results
+            st.divider()
+            st.subheader("Prediction Results")
+            
+            metric_col1, metric_col2, metric_col3 = st.columns(3)
+            metric_col1.metric("Landslide Probability", f"{probability * 100:.1f}%", f"{probability:.3f} raw")
+            metric_col2.metric("Risk Level", risk_label)
+            metric_col3.metric(
+                "System Action", 
+                "🚨 WARNING" if is_warning else "✅ NO WARNING",
+                delta="Over Threshold" if is_warning else "Safe",
+                delta_color="inverse" if is_warning else "normal"
+            )
