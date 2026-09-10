@@ -339,22 +339,31 @@ with tabs[1]:
             height=600,
         )
         
-        # Apply free Esri satellite imagery
+       # Apply free Esri satellite imagery + Location Labels (Hybrid View)
         fig_map.update_layout(
             mapbox_style="white-bg",
             mapbox_layers=[
+                # Base Layer: Satellite Imagery
                 {
                     "below": 'traces',
                     "sourcetype": "raster",
-                    "sourceattribution": "Esri",
+                    "sourceattribution": "Esri Satellite",
                     "source": [
                         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                    ]
+                },
+                # Overlay Layer: Location Names & Boundaries
+                {
+                    "below": 'traces',
+                    "sourcetype": "raster",
+                    "sourceattribution": "Esri Labels",
+                    "source": [
+                        "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
                     ]
                 }
             ],
             margin=dict(l=0, r=0, t=0, b=0)
         )
-        st.plotly_chart(fig_map, use_container_width=True)
 
 # --------------------------------------------------------------------------
 # SECTION 3 — WARNING CENTER
@@ -758,19 +767,28 @@ with tabs[7]:
                     height=600,
                 )
                 
-                # Apply free Esri satellite imagery
-                fig_sim_map.update_layout(
-                    mapbox_style="white-bg",
-                    mapbox_layers=[
-                        {
-                            "below": 'traces',
-                            "sourcetype": "raster",
-                            "sourceattribution": "Esri",
-                            "source": [
-                                "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                            ]
-                        }
-                    ],
-                    margin=dict(l=0, r=0, t=0, b=0)
-                )
-                st.plotly_chart(fig_sim_map, use_container_width=True)
+             # Apply free Esri satellite imagery + Location Labels (Hybrid View)
+        fig_map.update_layout(
+            mapbox_style="white-bg",
+            mapbox_layers=[
+                # Base Layer: Satellite Imagery
+                {
+                    "below": 'traces',
+                    "sourcetype": "raster",
+                    "sourceattribution": "Esri Satellite",
+                    "source": [
+                        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                    ]
+                },
+                # Overlay Layer: Location Names & Boundaries
+                {
+                    "below": 'traces',
+                    "sourcetype": "raster",
+                    "sourceattribution": "Esri Labels",
+                    "source": [
+                        "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+                    ]
+                }
+            ],
+            margin=dict(l=0, r=0, t=0, b=0)
+        )
