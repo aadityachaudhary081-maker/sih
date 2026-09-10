@@ -2,19 +2,28 @@ name: Phase 11 Live Rainfall + Prediction Update
 
 on:
   schedule:
+    # Runs hourly, at minute 5 (avoids the exact top-of-hour crowd on GitHub's scheduler).
+    # Matches the hourly cadence recommended in pipeline.py's scheduling note,
+    # since Open-Meteo's "today" total is provisional until the day ends.
     - cron: "5 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch: {}  # lets you trigger a run manually from the Actions tab
 
 jobs:
   update-predictions:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: DEBUG — list checked-out files
+        run: |
+          echo "=== Current branch/commit ==="
+          git branch --show-current
+          git log -1 --oneline
+          echo "=== Files in repo root ==="
+          ls -la
+          echo "=== Is phase9_terrain_input.csv here? ==="
+          test -f phase9_terrain_input.csv && echo "FOUND, first 3 lines:" && head -3 phase9_terrain_input.csv || echo "NOT FOUND at this path"
 
       - name: Set up Python
         uses: actions/setup-python@v5
