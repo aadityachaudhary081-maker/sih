@@ -3,9 +3,9 @@
   "operating_threshold": 0.47,
   "total_locations": 290,
   "total_prediction_records": 1863,
-  "warnings": 100,
-  "no_warnings": 190,
-  "mean_landslide_probability": 0.3926005605914486,
-  "prediction_timestamp_utc": "2026-09-11T05:52:56.591549+00:00",
+  "warnings": 91,
+  "no_warnings": 199,
+  "mean_landslide_probability": 0.37075796799494637,
+  "prediction_timestamp_utc": "2026-09-11T11:11:54.780485+00:00",
   "phase": 9
 }
