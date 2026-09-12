@@ -1,11 +1,11 @@
 {
   "model_name": "Random Forest",
   "operating_threshold": 0.47,
-  "total_locations": 416,
-  "total_prediction_records": 2408,
-  "warnings": 183,
-  "no_warnings": 233,
-  "mean_landslide_probability": 0.42864299171160436,
-  "prediction_timestamp_utc": "2026-09-12T10:41:05.986856+00:00",
+  "total_locations": 419,
+  "total_prediction_records": 2411,
+  "warnings": 197,
+  "no_warnings": 222,
+  "mean_landslide_probability": 0.475969029900604,
+  "prediction_timestamp_utc": "2026-09-12T14:01:30.019250+00:00",
   "phase": 9
 }
