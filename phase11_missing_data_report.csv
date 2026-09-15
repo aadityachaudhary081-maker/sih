@@ -1,9 +1,3 @@
 grid_id,run_timestamp,as_of_date,reason
-AIZ_GRID_036,2026-09-15T18:09:32.850255,2026-09-15,"Fetch failed for grid AIZ_GRID_036 at (23.681150714285714,92.85990128571429): HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=15)"
-AIZ_GRID_040,2026-09-15T18:09:32.850262,2026-09-15,"Fetch failed for grid AIZ_GRID_040 at (23.73781970588235,92.69431394117647): HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=15)"
-AIZ_GRID_041,2026-09-15T18:09:32.850264,2026-09-15,"Fetch failed for grid AIZ_GRID_041 at (23.72203618032787,92.71799381967213): HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=15)"
-AIZ_GRID_042,2026-09-15T18:09:32.850266,2026-09-15,"Fetch failed for grid AIZ_GRID_042 at (23.731720739130434,92.78429734782608): HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=15)"
-AIZ_GRID_043,2026-09-15T18:09:32.850267,2026-09-15,"Fetch failed for grid AIZ_GRID_043 at (23.7324165,92.8252504): HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=15)"
-AIZ_GRID_044,2026-09-15T18:09:32.850269,2026-09-15,"Fetch failed for grid AIZ_GRID_044 at (23.72530972222222,92.86177766666667): HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=15)"
-AIZ_GRID_048,2026-09-15T18:09:32.850270,2026-09-15,"Fetch failed for grid AIZ_GRID_048 at (23.778194,92.6756965): HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=15)"
-AIZ_GRID_049,2026-09-15T18:09:32.850272,2026-09-15,"Fetch failed for grid AIZ_GRID_049 at (23.763411,92.734181): HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=15)"
+AIZ_GRID_117,2026-09-15T22:07:40.670185,2026-09-15,"Fetch failed for grid AIZ_GRID_117 at (24.273194,92.967502): HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=15)"
+AIZ_GRID_122,2026-09-15T22:07:40.670192,2026-09-15,"Fetch failed for grid AIZ_GRID_122 at (24.365123999999998,92.92688400000002): HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=15)"
