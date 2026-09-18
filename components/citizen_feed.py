@@ -13,55 +13,38 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
-from PIL import Image
 
-from citizen_reporting import (
-    load_citizen_reports,
-    add_citizen_report,
-    update_report_status,
-    HAZARD_TYPES,
-    STATUS_PENDING,
-    STATUS_VERIFIED,
-    STATUS_RESOLVED,
-    STATUS_OPTIONS,
-    find_nearest_monitoring_zone,
-)
-from geocoding import (
-    get_location_name,
-    format_location_display,
-    is_within_mizoram,
-)
-
+from citizen_reporting import add_citizen_report, HAZARD_TYPES
+from geocoding import get_location_name, is_within_mizoram
 
 def set_coords(lat: float, lon: float, acc: float = 5.0):
-    """Safely updates session state for coordinates."""
-    st.session_state["rep_lat_val"] = float(lat)
-    st.session_state["rep_lon_val"] = float(lon)
-    st.session_state["rep_acc_val"] = float(acc)
+    """Safely updates session state for coordinates. Immediately syncs the map."""
+    st.session_state.rep_lat = float(lat)
+    st.session_state.rep_lon = float(lon)
+    st.session_state.rep_acc = float(acc)
 
 
 def render_report_hazard_view(latest_df: pd.DataFrame):
     """Renders the dedicated Report Ground Hazard interactive submission view."""
 
     # 1. Catch GPS parameters passed from the browser component
-    qp = st.query_params
-    if "gps_lat" in qp and "gps_lon" in qp:
+    if "gps_lat" in st.query_params and "gps_lon" in st.query_params:
         try:
-            st.session_state["rep_lat_val"] = float(qp["gps_lat"])
-            st.session_state["rep_lon_val"] = float(qp["gps_lon"])
-            st.session_state["rep_acc_val"] = float(qp.get("gps_acc", 10.0))
+            st.session_state.rep_lat = float(st.query_params["gps_lat"])
+            st.session_state.rep_lon = float(st.query_params["gps_lon"])
+            st.session_state.rep_acc = float(st.query_params.get("gps_acc", 10.0))
             st.query_params.clear()
             st.toast("📍 Real GPS coordinates synced with map!", icon="✅")
         except Exception:
             pass
 
-    # Ensure baseline coordinate state exists (Default to central Aizawl)
-    if "rep_lat_val" not in st.session_state:
-        st.session_state["rep_lat_val"] = 23.738800
-    if "rep_lon_val" not in st.session_state:
-        st.session_state["rep_lon_val"] = 92.696300
-    if "rep_acc_val" not in st.session_state:
-        st.session_state["rep_acc_val"] = 6.5
+    # 2. Ensure baseline coordinate state exists
+    if "rep_lat" not in st.session_state:
+        st.session_state.rep_lat = 23.738800
+    if "rep_lon" not in st.session_state:
+        st.session_state.rep_lon = 92.696300
+    if "rep_acc" not in st.session_state:
+        st.session_state.rep_acc = 6.5
 
     col_t1, col_t2 = st.columns([4, 1])
 
@@ -92,7 +75,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
     # Step 1: Photographic evidence
     st.markdown("#### 01. Photographic Evidence")
     uploaded_image = st.file_uploader(
-        "Upload or capture photograph of the hazard (cracks, debris, runoff, rockfall):",
+        "Upload or capture photograph of the hazard:",
         type=["jpg", "jpeg", "png"],
         key="dedicated_img_upload",
     )
@@ -123,24 +106,19 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
             )
             matched_row = latest_df[latest_df["location_id"] == selected_st].iloc[0]
             set_coords(matched_row["latitude"], matched_row["longitude"], 5.0)
-            st.caption(
-                f"Selected: **{selected_st}** — Risk Tier: **{matched_row.get('risk_level', 'N/A')}** | Elev: **{matched_row.get('elevation_m', 0):.0f}m**"
-            )
+            st.caption(f"Selected: **{selected_st}** — Elev: **{matched_row.get('elevation_m', 0):.0f}m**")
 
     elif loc_mode == "📍 Instant Presets (Surat / Aizawl)":
         p_col1, p_col2, p_col3 = st.columns(3)
         with p_col1:
-            if st.button("📍 Set to Surat (Current Location)", width="stretch"):
+            if st.button("📍 Set to Surat", width="stretch"):
                 set_coords(21.170240, 72.831060, 8.0)
-                st.rerun()
         with p_col2:
             if st.button("📍 Set to Aizawl Center", width="stretch"):
                 set_coords(23.738800, 92.696300, 5.0)
-                st.rerun()
         with p_col3:
-            if st.button("📍 Set to Durtlang Hills (High Risk Zone)", width="stretch"):
+            if st.button("📍 Set to High Risk Zone", width="stretch"):
                 set_coords(23.772500, 92.724100, 5.0)
-                st.rerun()
 
     elif loc_mode == "📡 Device GPS (Browser)":
         components.html(
@@ -183,7 +161,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
                     },
                     function(err) {
                         btn.disabled = false;
-                        status.innerHTML = `<span style='color: #f87171;'>Permission blocked or timed out. Use 'Instant Presets'.</span>`;
+                        status.innerHTML = `<span style='color: #f87171;'>Permission blocked. Use 'Instant Presets'.</span>`;
                     },
                     { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
                 );
@@ -195,7 +173,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
 
     st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
-    # Coordinate Displays / Inputs
+    # 3. Streamlit Native State-Bound Inputs (No 'value=' param, mapped directly to session_state)
     c_lat, c_lon, c_acc = st.columns(3)
 
     with c_lat:
@@ -203,38 +181,30 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
             "Latitude (°N)",
             min_value=-90.0,
             max_value=90.0,
-            value=float(st.session_state["rep_lat_val"]),
             format="%.6f",
-            key="rep_lat_num_input",
-            disabled=(loc_mode != "✍️ Manual Coordinate Entry"),
+            key="rep_lat",
+            disabled=(loc_mode == "🛰️ Monitored Station (Aizawl Grid)"),
         )
     with c_lon:
         rep_lon = st.number_input(
             "Longitude (°E)",
             min_value=-180.0,
             max_value=180.0,
-            value=float(st.session_state["rep_lon_val"]),
             format="%.6f",
-            key="rep_lon_num_input",
-            disabled=(loc_mode != "✍️ Manual Coordinate Entry"),
+            key="rep_lon",
+            disabled=(loc_mode == "🛰️ Monitored Station (Aizawl Grid)"),
         )
     with c_acc:
         rep_acc = st.number_input(
             "Estimated Accuracy (± meters)",
             min_value=0.1,
             max_value=10000.0,
-            value=float(st.session_state["rep_acc_val"]),
             format="%.1f",
-            key="rep_acc_num_input",
-            disabled=(loc_mode != "✍️ Manual Coordinate Entry"),
+            key="rep_acc",
+            disabled=(loc_mode == "🛰️ Monitored Station (Aizawl Grid)"),
         )
 
-    # Sync any manual changes
-    st.session_state["rep_lat_val"] = rep_lat
-    st.session_state["rep_lon_val"] = rep_lon
-    st.session_state["rep_acc_val"] = rep_acc
-
-    # Reverse Geocoding via OpenStreetMap Nominatim
+    # 4. Reverse Geocoding via OpenStreetMap Nominatim
     loc_name_api = get_location_name(rep_lat, rep_lon, use_api=True)
     coord_str = f"{rep_lat:.6f}° N, {rep_lon:.6f}° E"
     is_in_district = is_within_mizoram(rep_lat, rep_lon, loc_name_api)
@@ -247,7 +217,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
         status_badge_html = '<span style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #10b981; padding: 2px 8px; border-radius: 4px; font-size: 0.68rem; font-weight: 800; margin-left: 8px;">✓ WITHIN MONITORING GRID</span>'
         card_style = "background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(56, 189, 248, 0.35);"
     else:
-        status_badge_html = '<span style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 0.68rem; font-weight: 800; margin-left: 8px;">🚫 OUTSIDE DISTRICT BOUNDARY</span>'
+        status_badge_html = '<span style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 0.68rem; font-weight: 800; margin-left: 8px;">🚫 OUTSIDE BOUNDARY</span>'
         card_style = "background: rgba(30, 15, 20, 0.9); border: 1px solid rgba(239, 68, 68, 0.6);"
 
     st.markdown(
@@ -270,7 +240,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
         unsafe_allow_html=True,
     )
 
-    # Satellite Map Location Preview Pin (Key includes coordinates so it re-centers immediately)
+    # 5. Satellite Map Location Preview Pin (Dynamic Key forces immediate recentering)
     with st.expander("🗺️ Preview Selected Location on Satellite Map", expanded=True):
         fig_preview = go.Figure()
         fig_preview.add_trace(
@@ -321,15 +291,15 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
     if not is_in_district:
         st.markdown(
             f"""
-            <div style="background: rgba(239, 68, 68, 0.16); border: 2px solid #ef4444; border-radius: 10px; padding: 16px 20px; margin: 12px 0 16px 0; box-shadow: 0 0 24px rgba(239, 68, 68, 0.25);">
+            <div style="background: rgba(239, 68, 68, 0.16); border: 2px solid #ef4444; border-radius: 10px; padding: 16px 20px; margin: 12px 0 16px 0;">
                 <div style="display: flex; align-items: flex-start; gap: 14px;">
                     <span style="font-size: 1.8rem; line-height: 1;">🚫</span>
                     <div style="flex: 1;">
-                        <div style="font-size: 1.05rem; font-weight: 800; color: #f87171; letter-spacing: -0.01em;">
+                        <div style="font-size: 1.05rem; font-weight: 800; color: #f87171;">
                             LOCATION OUTSIDE DISTRICT JURISDICTION — ENTRY BLOCKED
                         </div>
                         <div style="font-size: 0.85rem; color: #fecaca; margin-top: 5px; line-height: 1.55;">
-                            Detected coordinates <strong>({coord_str})</strong> resolve to <strong style="color: #ffffff;">{display_title}</strong>, which is outside the active <strong>Aizawl District &amp; Mizoram State</strong> monitoring boundary.<br>
+                            Detected coordinates resolve to <strong style="color: #ffffff;">{display_title}</strong>, which is outside the active monitoring boundary.<br>
                             To test reporting, select <strong>'🛰️ Monitored Station'</strong> or choose an <strong>Aizawl Preset</strong> above.
                         </div>
                     </div>
@@ -338,14 +308,6 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
             """,
             unsafe_allow_html=True,
         )
-
-        c_rst1, c_rst2 = st.columns([3, 1])
-        with c_rst1:
-            st.caption("Reset location to Aizawl monitoring station:")
-        with c_rst2:
-            if st.button("📍 Reset to Aizawl Grid", key="btn_reset_to_aizawl", width="stretch"):
-                set_coords(23.738800, 92.696300, 5.0)
-                st.rerun()
 
     # Step 3: Hazard details & Submit
     st.markdown("#### 03. Hazard Classification & Details")
@@ -358,15 +320,13 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
                 "Hazard Observation Type:",
                 HAZARD_TYPES,
                 index=2,
-                key="rep_type_sel",
                 disabled=not is_in_district,
             )
         with c_desc:
             rep_desc = st.text_area(
                 "Describe the observed hazard:",
-                placeholder="E.g. Visible 2-inch road cracking across asphalt slope, active water seep near foundation..." if is_in_district else "🚫 Entry disabled: Coordinates are outside Aizawl District jurisdiction.",
+                placeholder="E.g. Visible 2-inch road cracking..." if is_in_district else "🚫 Entry disabled.",
                 height=90,
-                key="rep_desc_txt",
                 disabled=not is_in_district,
             )
 
@@ -375,46 +335,17 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
         else:
             submit_btn = st.form_submit_button("🚨 TRANSMIT GEOTAGGED GROUND REPORT", type="primary", width="stretch")
 
-        if submit_btn:
-            if not is_in_district:
-                st.error("🚫 Location outside district / state boundary. Ground hazard report not allowed.")
-            elif not rep_desc.strip():
-                st.error("Please provide a brief description of the observed hazard.")
-            else:
-                new_report = add_citizen_report(
-                    image_file=uploaded_image,
-                    latitude=rep_lat,
-                    longitude=rep_lon,
-                    gps_accuracy_m=rep_acc,
-                    report_type=rep_type,
-                    description=rep_desc,
-                    latest_risk_df=latest_df,
-                )
-
-                nearest_zone_name = ""
-                if new_report.get("nearest_zone_id"):
-                    matched_row = latest_df[latest_df["location_id"] == new_report["nearest_zone_id"]]
-                    if not matched_row.empty:
-                        nearest_zone_name = get_location_name(float(matched_row.iloc[0]["latitude"]), float(matched_row.iloc[0]["longitude"]), use_api=True)
-
-                final_report_loc = display_title if has_named_location else coord_str
-
-                st.success("✅ Ground Hazard Report successfully registered, geotagged, and correlated!")
-                st.markdown(
-                    f"""
-                    <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 10px; padding: 16px 20px; margin: 14px 0;">
-                        <div style="font-weight: 800; color: #34d399; font-size: 1.1rem;">INCIDENT LOGGED: {new_report['id']}</div>
-                        <div style="font-size: 0.85rem; color: #f1f5f9; margin-top: 6px; line-height: 1.6;">
-                            • <strong>Locality:</strong> 📍 {final_report_loc} ({coord_str})<br>
-                            • <strong>Hazard Type:</strong> {new_report['report_type']}<br>
-                            • <strong>Nearest Monitored Station:</strong> <span style="color: #38bdf8;">{new_report['nearest_zone_id']}</span> {f'({nearest_zone_name})' if nearest_zone_name else ''} — <strong>{new_report['distance_to_zone_m']} m away</strong><br>
-                            • <strong>Station Risk Status:</strong> <strong style="color: #f97316;">{new_report['zone_risk_level']}</strong> (Prob: {new_report['zone_probability']*100:.1f}%)<br>
-                            • <strong>Verification Status:</strong> <strong style="color: #f59e0b;">{new_report['status']}</strong>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+        if submit_btn and is_in_district and rep_desc.strip():
+            new_report = add_citizen_report(
+                image_file=uploaded_image,
+                latitude=rep_lat,
+                longitude=rep_lon,
+                gps_accuracy_m=rep_acc,
+                report_type=rep_type,
+                description=rep_desc,
+                latest_risk_df=latest_df,
+            )
+            st.success("✅ Ground Hazard Report successfully registered!")
 
 
 def render_citizen_feed(latest_df: pd.DataFrame):
