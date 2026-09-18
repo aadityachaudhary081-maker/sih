@@ -7,6 +7,7 @@ WHAT IS HAPPENING → WHERE IS IT HAPPENING → WHY IS IT HAPPENING → WHAT DOE
 from typing import List, Dict
 
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 from components.risk_map import render_risk_map, RISK_COLORS
@@ -102,7 +103,7 @@ def render_overview(
 
     st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
 
-    # Main Grid: Left = Hero Map (Col 8), Right = AI & Rainfall Telemetry (Col 4)
+    # Main Grid: Left = Hero Map (Col 7), Right = AI & Rainfall Telemetry (Col 5)
     col_map, col_intel = st.columns([7, 5])
 
     with col_map:
@@ -180,12 +181,78 @@ def render_overview(
                     </div>
                 </div>
                 <div style="font-size: 0.72rem; color: #64748b;">
-                    Strict calendar-day gap policy. Synced hourly via Open-Meteo Aizawl centroids.
+                    Strict calendar-day gap policy. Synced via IMD 0.25° Gridded Rainfall Product.
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
+
+    st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # DAY-BY-DAY HISTORICAL RISK DISTRIBUTION CHART
+    # --------------------------------------------------------------------------
+    if not history_df.empty and "date" in history_df.columns:
+        st.markdown(
+            """
+            <div class="command-panel" style="margin-bottom: 14px;">
+                <div class="panel-header">
+                    <div class="panel-title">📈 DAY-BY-DAY HISTORICAL RISK EVOLUTION &amp; STACKED DISTRIBUTION</div>
+                    <span style="font-size: 0.72rem; color: #38bdf8; font-weight: 700;">TEMPORAL TIMELINE</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        chart_df = history_df.copy()
+        chart_df["date_str"] = pd.to_datetime(chart_df["date"]).dt.strftime("%Y-%m-%d")
+
+        daily_counts = (
+            chart_df.groupby(["date_str", "risk_level"])
+            .size()
+            .reset_index(name="station_count")
+        )
+
+        risk_order = ["LOW", "MODERATE", "HIGH", "CRITICAL"]
+        color_map = {
+            "LOW": "#22c55e",
+            "MODERATE": "#eab308",
+            "HIGH": "#f97316",
+            "CRITICAL": "#ef4444",
+        }
+
+        fig = px.bar(
+            daily_counts,
+            x="date_str",
+            y="station_count",
+            color="risk_level",
+            category_orders={"risk_level": risk_order},
+            color_discrete_map=color_map,
+            barmode="stack",
+            labels={"date_str": "Date (IST)", "station_count": "Number of Stations", "risk_level": "Risk Tier"},
+        )
+
+        fig.update_layout(
+            paper_bgcolor="rgba(15, 23, 42, 0.4)",
+            plot_bgcolor="rgba(15, 23, 42, 0.4)",
+            font=dict(color="#94a3b8", family="Inter, sans-serif", size=11),
+            xaxis=dict(gridcolor="rgba(255, 255, 255, 0.05)", showline=False),
+            yaxis=dict(gridcolor="rgba(255, 255, 255, 0.05)", showline=False),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1,
+                font=dict(size=10),
+            ),
+            margin=dict(l=10, r=10, t=25, b=20),
+            height=280,
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
 
