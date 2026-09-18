@@ -26,9 +26,4 @@ RAINFALL_OUTPUT_CSV = os.path.join(DATA_DIR, "phase9_rainfall_input.csv")
 DAILY_RAINFALL_LOG_CSV = os.path.join(DATA_DIR, "phase11_grid_rainfall_daily_log.csv")
 MISSING_DATA_REPORT_CSV = os.path.join(DATA_DIR, "phase11_missing_data_report.csv")
 
-# Production Data Paths
-DATA_DIR = "data"
-TERRAIN_INPUT_CSV = os.path.join(DATA_DIR, "phase9_terrain_input.csv")
-RAINFALL_OUTPUT_CSV = os.path.join(DATA_DIR, "phase9_rainfall_input.csv")
-DAILY_RAINFALL_LOG_CSV = os.path.join(DATA_DIR, "phase11_grid_rainfall_daily_log.csv")
-MISSING_DATA_REPORT_CSV = os.path.join(DATA_DIR, "phase11_missing_data_report.csv")
+
