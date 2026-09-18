@@ -1,8 +1,8 @@
 """
 NEXORA Command Center — Geo-Tagged Citizen Ground Reporting Component
 Includes:
-- Client-side Browser HTML5 GPS Geolocation Bridge (Device GPS)
-- Station Selector & Manual Override fallbacks
+- Direct DOM Injection Device GPS Bridge (Instantaneous coordinate population)
+- Fallback Station Dropdown & Manual Inputs
 - Real-time Reverse Geocoding via OpenStreetMap Nominatim
 - Live satellite map location preview pin
 - Spatial Hazard Risk Correlation (Haversine distance to nearest monitoring station)
@@ -10,6 +10,7 @@ Includes:
 """
 
 from datetime import datetime
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -35,34 +36,22 @@ from geocoding import (
 
 
 def cb_reset_to_aizawl():
-    """Callback to reset coordinates to Aizawl center."""
+    """Callback to reset coordinates to central Aizawl."""
     st.session_state["rep_lat_val"] = 23.738800
     st.session_state["rep_lon_val"] = 92.696300
     st.session_state["rep_acc_val"] = 6.5
 
 
 def render_report_hazard_view(latest_df: pd.DataFrame):
-    """Renders the dedicated Report Ground Hazard view with client-side GPS resolution."""
+    """Renders the dedicated Report Ground Hazard interactive submission view with instant client GPS resolution."""
 
-    # Initialize coordinate state (defaults to central Aizawl)
+    # Ensure baseline coordinate state exists
     if "rep_lat_val" not in st.session_state:
         st.session_state["rep_lat_val"] = 23.738800
     if "rep_lon_val" not in st.session_state:
         st.session_state["rep_lon_val"] = 92.696300
     if "rep_acc_val" not in st.session_state:
         st.session_state["rep_acc_val"] = 6.5
-
-    # Check query params set by the client-side JavaScript bridge
-    query_params = st.query_params
-    if "gps_lat" in query_params:
-        try:
-            st.session_state["rep_lat_val"] = float(query_params["gps_lat"])
-            st.session_state["rep_lon_val"] = float(query_params.get("gps_lon", 92.696300))
-            st.session_state["rep_acc_val"] = float(query_params.get("gps_acc", 10.0))
-            st.query_params.clear()
-            st.toast("📍 Real GPS coordinates received from browser!", icon="✅")
-        except Exception:
-            pass
 
     col_t1, col_t2 = st.columns([4, 1])
 
@@ -110,7 +99,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
     )
 
     if loc_mode == "📡 Device GPS (Browser)":
-        # Embedded Client-Side HTML5 Geolocation Bridge
+        # Embedded Client-Side HTML5 Geolocation Bridge using direct DOM value injection
         components.html(
             """
             <div style="display: flex; align-items: center; gap: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
@@ -128,9 +117,23 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
                     gap: 6px;">
                     📍 Request Device GPS Location
                 </button>
-                <span id="gps-status" style="font-size: 0.8rem; color: #94a3b8;">Click button to request browser GPS coordinates</span>
+                <span id="gps-status" style="font-size: 0.8rem; color: #94a3b8;">Click button to auto-fill input boxes</span>
             </div>
             <script>
+            function setNativeValue(element, value) {
+                const valueSetter = Object.getOwnPropertyDescriptor(element, 'value').set;
+                const prototype = Object.getPrototypeOf(element);
+                const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
+                
+                if (prototypeValueSetter && valueSetter !== prototypeValueSetter) {
+                    prototypeValueSetter.call(element, value);
+                } else {
+                    valueSetter.call(element, value);
+                }
+                element.dispatchEvent(new Event('input', { bubbles: true }));
+                element.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
             function fetchDeviceLocation() {
                 const status = document.getElementById('gps-status');
                 const btn = document.getElementById('gps-btn');
@@ -141,31 +144,40 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
                 }
                 
                 btn.disabled = true;
-                status.innerHTML = "<span style='color: #38bdf8;'>Querying device GPS sensors...</span>";
+                status.innerHTML = "<span style='color: #38bdf8;'>Querying GPS sensors...</span>";
                 
                 navigator.geolocation.getCurrentPosition(
                     function(pos) {
                         const lat = pos.coords.latitude.toFixed(6);
                         const lon = pos.coords.longitude.toFixed(6);
                         const acc = pos.coords.accuracy.toFixed(1);
-                        status.innerHTML = `<span style='color: #34d399;'>Acquired: ${lat}, ${lon} (±${acc}m). Syncing...</span>`;
                         
-                        // Push coordinates back into Streamlit via URL parameters
-                        const targetUrl = new URL(window.parent.location.href);
-                        targetUrl.searchParams.set('gps_lat', lat);
-                        targetUrl.searchParams.set('gps_lon', lon);
-                        targetUrl.searchParams.set('gps_acc', acc);
-                        window.parent.location.href = targetUrl.toString();
+                        try {
+                            const doc = window.parent.document;
+                            const inputs = doc.querySelectorAll('input[type="number"]');
+                            
+                            if (inputs.length >= 3) {
+                                setNativeValue(inputs[0], lat);
+                                setNativeValue(inputs[1], lon);
+                                setNativeValue(inputs[2], acc);
+                                status.innerHTML = `<span style='color: #34d399;'>Filled: ${lat}, ${lon} (±${acc}m)</span>`;
+                            } else {
+                                status.innerHTML = "<span style='color: #f59e0b;'>Input elements not detected.</span>";
+                            }
+                        } catch (e) {
+                            status.innerHTML = `<span style='color: #f87171;'>DOM Access Blocked: ${e.message}</span>`;
+                        }
+                        btn.disabled = false;
                     },
                     function(err) {
                         btn.disabled = false;
                         let msg = "Permission denied or unavailable.";
-                        if (err.code === 1) msg = "Location permission blocked in browser settings.";
-                        else if (err.code === 2) msg = "GPS position unavailable.";
-                        else if (err.code === 3) msg = "GPS request timed out.";
-                        status.innerHTML = `<span style='color: #f87171;'>Error: ${msg} Please switch to 'Select Monitored Station'.</span>`;
+                        if (err.code === 1) msg = "Location permission blocked in browser.";
+                        else if (err.code === 2) msg = "Position unavailable.";
+                        else if (err.code === 3) msg = "Request timed out.";
+                        status.innerHTML = `<span style='color: #f87171;'>${msg} Switch to 'Select Monitored Station'.</span>`;
                     },
-                    { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
                 );
             }
             </script>
@@ -191,7 +203,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
 
     st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
-    # Coordinate Display / Manual Inputs
+    # Coordinate Display & Manual Inputs
     c_lat, c_lon, c_acc = st.columns(3)
 
     with c_lat:
@@ -229,7 +241,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
     st.session_state["rep_lon_val"] = rep_lon
     st.session_state["rep_acc_val"] = rep_acc
 
-    # Reverse Geocoding & Jurisdiction Check
+    # Real-time API locality lookup for entered coordinates via OpenStreetMap Nominatim
     loc_name_api = get_location_name(rep_lat, rep_lon, use_api=True)
     coord_str = f"{rep_lat:.6f}° N, {rep_lon:.6f}° E"
     is_in_district = is_within_mizoram(rep_lat, rep_lon, loc_name_api)
@@ -265,7 +277,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
         unsafe_allow_html=True,
     )
 
-    # Satellite Map Location Preview
+    # Satellite Map Location Preview Pin
     with st.expander("🗺️ Preview Selected Location on Satellite Map", expanded=True):
         fig_preview = go.Figure()
         fig_preview.add_trace(
