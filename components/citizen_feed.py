@@ -4,6 +4,7 @@ Includes:
 - Standalone Interactive Hazard Submission Interface
 - Real-time Reverse Geocoding via OpenStreetMap Nominatim
 - Present location detection via Network IP Geolocation
+- Fallback Location Selectors: Monitored Station Dropdown & Manual Coordinate Inputs
 - Live satellite map location preview pin
 - Spatial Hazard Risk Correlation (Haversine distance to nearest monitoring station)
 - Aizawl District jurisdiction restriction
@@ -95,7 +96,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
         )
 
     with col_t2:
-        if st.button("⬅️ Return to Overview", use_container_width=True):
+        if st.button("⬅️ Return to Overview", width="stretch"):
             st.session_state["active_nav"] = "◉ Command Overview"
             st.rerun()
 
@@ -107,49 +108,75 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
         key="dedicated_img_upload",
     )
 
-    # Step 2: Location via Present Location detection
+    # Step 2: Location via Present Location detection or Fallback Selectors
     st.markdown("#### 02. Location & GPS Coordinates")
-    st.caption("Auto-detect your present location via network, or specify coordinates directly:")
+    st.caption("Auto-detect via network, choose an active monitoring station, or enter coordinates directly:")
 
-    col_loc_btn, col_loc_info = st.columns([1, 2])
+    loc_mode = st.radio(
+        "Detection Mode",
+        ["Auto-Detect / GPS", "Select Monitored Station", "Manual Coordinate Entry"],
+        horizontal=True,
+        key="loc_input_mode_radio",
+    )
 
-    with col_loc_btn:
-        if st.button(
-            "📡 Use Present Location",
-            key="btn_use_present_location",
-            use_container_width=True,
-            help="Detects your current location via network IP geolocation",
-        ):
-            with st.spinner("Detecting your present location..."):
-                geo_res = fetch_ip_geolocation()
-                if geo_res:
-                    st.session_state["rep_lat_val"] = geo_res["latitude"]
-                    st.session_state["rep_lon_val"] = geo_res["longitude"]
-                    st.session_state["rep_acc_val"] = geo_res.get("accuracy", 25.0)
-                    city = geo_res.get("city", "")
-                    region = geo_res.get("region", "")
-                    loc_hint = f"{city}, {region}".strip(", ") if city or region else "location detected"
-                    st.toast(f"📍 Present location set: {loc_hint}", icon="✅")
-                    st.rerun()
-                else:
-                    st.warning("Could not detect present location automatically. Please enter coordinates below.")
+    if loc_mode == "Auto-Detect / GPS":
+        col_loc_btn, col_loc_info = st.columns([1, 2])
 
-    with col_loc_info:
-        st.markdown(
-            """
-            <div style="background: rgba(15,23,42,0.7); border: 1px solid rgba(56,189,248,0.2);
-                        border-radius: 6px; padding: 8px 12px; font-size: 0.78rem; color: #94a3b8;">
-                📌 Click <strong style="color: #38bdf8;">Use Present Location</strong> to auto-detect your
-                current GPS coordinates via network. You can also enter coordinates manually in the fields below.
-                <br><span style="color: #f59e0b; font-weight: 600;">⚠ Only locations within Aizawl District are permitted.</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        with col_loc_btn:
+            if st.button(
+                "📡 Use Present Location",
+                key="btn_use_present_location",
+                width="stretch",
+                help="Detects your current location via network IP geolocation",
+            ):
+                with st.spinner("Detecting your present location..."):
+                    geo_res = fetch_ip_geolocation()
+                    if geo_res:
+                        st.session_state["rep_lat_val"] = geo_res["latitude"]
+                        st.session_state["rep_lon_val"] = geo_res["longitude"]
+                        st.session_state["rep_acc_val"] = geo_res.get("accuracy", 25.0)
+                        city = geo_res.get("city", "")
+                        region = geo_res.get("region", "")
+                        loc_hint = f"{city}, {region}".strip(", ") if city or region else "location detected"
+                        st.toast(f"📍 Present location set: {loc_hint}", icon="✅")
+                        st.rerun()
+                    else:
+                        st.warning("Could not detect present location automatically. Switch to 'Select Monitored Station' or 'Manual Coordinate Entry' below.")
+
+        with col_loc_info:
+            st.markdown(
+                """
+                <div style="background: rgba(15,23,42,0.7); border: 1px solid rgba(56,189,248,0.2);
+                            border-radius: 6px; padding: 8px 12px; font-size: 0.78rem; color: #94a3b8;">
+                    📌 Click <strong style="color: #38bdf8;">Use Present Location</strong> to auto-detect your
+                    current GPS coordinates via network. If detection fails, pick an Aizawl station above.
+                    <br><span style="color: #f59e0b; font-weight: 600;">⚠ Only locations within Aizawl District are permitted.</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    elif loc_mode == "Select Monitored Station":
+        if not latest_df.empty and "location_id" in latest_df.columns:
+            station_list = sorted(latest_df["location_id"].unique())
+            default_ix = 0
+            selected_st = st.selectbox(
+                "Select Verified Station / Monitoring Centroid:",
+                station_list,
+                index=default_ix,
+                key="sb_station_picker",
+            )
+            matched_row = latest_df[latest_df["location_id"] == selected_st].iloc[0]
+            st.session_state["rep_lat_val"] = float(matched_row["latitude"])
+            st.session_state["rep_lon_val"] = float(matched_row["longitude"])
+            st.session_state["rep_acc_val"] = 5.0
+            st.caption(f"Selected: **{selected_st}** — Risk Tier: **{matched_row.get('risk_level', 'N/A')}** | Elev: **{matched_row.get('elevation_m', 0):.0f}m**")
+        else:
+            st.info("No active station records found in memory.")
 
     st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
-    # Coordinate Number Inputs
+    # Coordinate Inputs (Editable in Manual mode, read-only display otherwise)
     c_lat, c_lon, c_acc = st.columns(3)
 
     with c_lat:
@@ -160,6 +187,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
             value=float(st.session_state["rep_lat_val"]),
             format="%.6f",
             key="rep_lat_num_input",
+            disabled=(loc_mode == "Select Monitored Station"),
         )
     with c_lon:
         rep_lon = st.number_input(
@@ -169,6 +197,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
             value=float(st.session_state["rep_lon_val"]),
             format="%.6f",
             key="rep_lon_num_input",
+            disabled=(loc_mode == "Select Monitored Station"),
         )
     with c_acc:
         rep_acc = st.number_input(
@@ -178,6 +207,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
             value=float(st.session_state["rep_acc_val"]),
             format="%.1f",
             key="rep_acc_num_input",
+            disabled=(loc_mode == "Select Monitored Station"),
         )
 
     # Sync state if edited manually
@@ -275,7 +305,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
             paper_bgcolor="#070a12",
             plot_bgcolor="#070a12",
         )
-        st.plotly_chart(fig_preview, use_container_width=True)
+        st.plotly_chart(fig_preview, width="stretch")
 
     # Pop-up Alert when coordinates fall outside Mizoram / district boundary
     if not is_in_district:
@@ -303,7 +333,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
         with c_rst1:
             st.caption("To enable reporting, reset coordinates to the Aizawl monitoring grid:")
         with c_rst2:
-            st.button("📍 Reset to Aizawl Grid", key="btn_reset_to_aizawl", on_click=cb_reset_to_aizawl, use_container_width=True)
+            st.button("📍 Reset to Aizawl Grid", key="btn_reset_to_aizawl", on_click=cb_reset_to_aizawl, width="stretch")
 
     # Step 3: Hazard details & Submit (Blocked if out of district)
     st.markdown("#### 03. Hazard Classification & Details")
@@ -329,9 +359,9 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
             )
 
         if not is_in_district:
-            submit_btn = st.form_submit_button("🚫 SUBMISSION BLOCKED — LOCATION OUTSIDE DISTRICT", disabled=True, use_container_width=True)
+            submit_btn = st.form_submit_button("🚫 SUBMISSION BLOCKED — LOCATION OUTSIDE DISTRICT", disabled=True, width="stretch")
         else:
-            submit_btn = st.form_submit_button("🚨 TRANSMIT GEOTAGGED GROUND REPORT", type="primary", use_container_width=True)
+            submit_btn = st.form_submit_button("🚨 TRANSMIT GEOTAGGED GROUND REPORT", type="primary", width="stretch")
 
         if submit_btn:
             if not is_in_district:
