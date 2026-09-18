@@ -1,15 +1,14 @@
 """
 NEXORA Command Center — Geo-Tagged Citizen Ground Reporting Component
 Includes:
-- Robust Client-Side Device GPS Geolocation
-- Synced Satellite Preview Pin
-- Station Selector & Manual Override Fallbacks
+- Instant Location Presets (Surat Test, Aizawl Center, Monitored Stations)
+- Device Browser GPS Bridge with automatic sync
+- Dynamic Map Re-centering & Satellite Pinning
 - Spatial Hazard Risk Correlation
-- District Boundary Guard with Simulation Testing Toggle
+- District Boundary Guard with Simulation Override for Testing
 """
 
 from datetime import datetime
-
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -34,17 +33,17 @@ from geocoding import (
 )
 
 
-def cb_reset_to_aizawl():
-    """Callback to reset coordinates to central Aizawl."""
-    st.session_state["rep_lat_val"] = 23.738800
-    st.session_state["rep_lon_val"] = 92.696300
-    st.session_state["rep_acc_val"] = 6.5
+def set_coords(lat: float, lon: float, acc: float = 5.0):
+    """Safely updates session state for coordinates."""
+    st.session_state["rep_lat_val"] = float(lat)
+    st.session_state["rep_lon_val"] = float(lon)
+    st.session_state["rep_acc_val"] = float(acc)
 
 
 def render_report_hazard_view(latest_df: pd.DataFrame):
     """Renders the dedicated Report Ground Hazard interactive submission view."""
 
-    # 1. Catch GPS coordinates from the browser bridge query parameters
+    # 1. Catch GPS parameters passed from the browser component
     qp = st.query_params
     if "gps_lat" in qp and "gps_lon" in qp:
         try:
@@ -56,7 +55,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
         except Exception:
             pass
 
-    # Ensure baseline coordinate state exists
+    # Ensure baseline coordinate state exists (Default to central Aizawl)
     if "rep_lat_val" not in st.session_state:
         st.session_state["rep_lat_val"] = 23.738800
     if "rep_lon_val" not in st.session_state:
@@ -100,79 +99,21 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
 
     # Step 2: Location & GPS Coordinates
     st.markdown("#### 02. Location & GPS Coordinates")
-    st.caption("Acquire location via device GPS, select an active station, or enter coordinates manually:")
+    st.caption("Choose an acquisition mode below:")
 
     loc_mode = st.radio(
         "Location Mode",
-        ["📡 Device GPS (Browser)", "🛰️ Select Monitored Station", "✍️ Manual Coordinate Entry"],
+        [
+            "🛰️ Monitored Station (Aizawl Grid)",
+            "📍 Instant Presets (Surat / Aizawl)",
+            "📡 Device GPS (Browser)",
+            "✍️ Manual Coordinate Entry",
+        ],
         horizontal=True,
         key="loc_input_mode_radio",
     )
 
-    if loc_mode == "📡 Device GPS (Browser)":
-        # Embedded Client-Side HTML5 Geolocation Bridge with parent URL parameter synchronization
-        components.html(
-            """
-            <div style="display: flex; align-items: center; gap: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                <button id="gps-btn" onclick="fetchDeviceLocation()" style="
-                    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-                    color: #ffffff;
-                    border: 1px solid #38bdf8;
-                    padding: 8px 18px;
-                    border-radius: 6px;
-                    font-size: 0.85rem;
-                    font-weight: 700;
-                    cursor: pointer;
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 6px;">
-                    📍 Acquire My Current Location
-                </button>
-                <span id="gps-status" style="font-size: 0.8rem; color: #94a3b8;">Click button to request browser GPS</span>
-            </div>
-            <script>
-            function fetchDeviceLocation() {
-                const status = document.getElementById('gps-status');
-                const btn = document.getElementById('gps-btn');
-                
-                if (!navigator.geolocation) {
-                    status.innerHTML = "<span style='color: #f87171;'>Browser does not support Geolocation.</span>";
-                    return;
-                }
-                
-                btn.disabled = true;
-                status.innerHTML = "<span style='color: #38bdf8;'>Detecting GPS coordinates...</span>";
-                
-                navigator.geolocation.getCurrentPosition(
-                    function(pos) {
-                        const lat = pos.coords.latitude.toFixed(6);
-                        const lon = pos.coords.longitude.toFixed(6);
-                        const acc = pos.coords.accuracy.toFixed(1);
-                        status.innerHTML = `<span style='color: #34d399;'>Found: ${lat}, ${lon}. Updating map...</span>`;
-                        
-                        const targetUrl = new URL(window.parent.location.href);
-                        targetUrl.searchParams.set('gps_lat', lat);
-                        targetUrl.searchParams.set('gps_lon', lon);
-                        targetUrl.searchParams.set('gps_acc', acc);
-                        window.parent.location.href = targetUrl.toString();
-                    },
-                    function(err) {
-                        btn.disabled = false;
-                        let msg = "Permission denied or unavailable.";
-                        if (err.code === 1) msg = "Permission blocked in browser.";
-                        else if (err.code === 2) msg = "Position unavailable.";
-                        else if (err.code === 3) msg = "GPS timed out.";
-                        status.innerHTML = `<span style='color: #f87171;'>${msg} Use 'Select Monitored Station' instead.</span>`;
-                    },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                );
-            }
-            </script>
-            """,
-            height=46,
-        )
-
-    elif loc_mode == "🛰️ Select Monitored Station":
+    if loc_mode == "🛰️ Monitored Station (Aizawl Grid)":
         if not latest_df.empty and "location_id" in latest_df.columns:
             station_list = sorted(latest_df["location_id"].unique())
             selected_st = st.selectbox(
@@ -181,16 +122,80 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
                 key="sb_station_picker",
             )
             matched_row = latest_df[latest_df["location_id"] == selected_st].iloc[0]
-            st.session_state["rep_lat_val"] = float(matched_row["latitude"])
-            st.session_state["rep_lon_val"] = float(matched_row["longitude"])
-            st.session_state["rep_acc_val"] = 5.0
-            st.caption(f"Selected: **{selected_st}** — Risk Tier: **{matched_row.get('risk_level', 'N/A')}** | Elev: **{matched_row.get('elevation_m', 0):.0f}m**")
-        else:
-            st.info("No active station records found in memory.")
+            set_coords(matched_row["latitude"], matched_row["longitude"], 5.0)
+            st.caption(
+                f"Selected: **{selected_st}** — Risk Tier: **{matched_row.get('risk_level', 'N/A')}** | Elev: **{matched_row.get('elevation_m', 0):.0f}m**"
+            )
+
+    elif loc_mode == "📍 Instant Presets (Surat / Aizawl)":
+        p_col1, p_col2, p_col3 = st.columns(3)
+        with p_col1:
+            if st.button("📍 Set to Surat (Current Location)", width="stretch"):
+                set_coords(21.170240, 72.831060, 8.0)
+                st.rerun()
+        with p_col2:
+            if st.button("📍 Set to Aizawl Center", width="stretch"):
+                set_coords(23.738800, 92.696300, 5.0)
+                st.rerun()
+        with p_col3:
+            if st.button("📍 Set to Durtlang Hills (High Risk Zone)", width="stretch"):
+                set_coords(23.772500, 92.724100, 5.0)
+                st.rerun()
+
+    elif loc_mode == "📡 Device GPS (Browser)":
+        components.html(
+            """
+            <div style="display: flex; align-items: center; gap: 12px; font-family: sans-serif;">
+                <button id="gps-btn" onclick="fetchDeviceLocation()" style="
+                    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+                    color: #ffffff;
+                    border: 1px solid #38bdf8;
+                    padding: 8px 18px;
+                    border-radius: 6px;
+                    font-size: 0.85rem;
+                    font-weight: 700;
+                    cursor: pointer;">
+                    📍 Request Device GPS
+                </button>
+                <span id="gps-status" style="font-size: 0.8rem; color: #94a3b8;">Click button to request sensor coordinates</span>
+            </div>
+            <script>
+            function fetchDeviceLocation() {
+                const status = document.getElementById('gps-status');
+                const btn = document.getElementById('gps-btn');
+                if (!navigator.geolocation) {
+                    status.innerHTML = "<span style='color: #f87171;'>Browser does not support Geolocation.</span>";
+                    return;
+                }
+                btn.disabled = true;
+                status.innerHTML = "<span style='color: #38bdf8;'>Detecting GPS coordinates...</span>";
+                navigator.geolocation.getCurrentPosition(
+                    function(pos) {
+                        const lat = pos.coords.latitude.toFixed(6);
+                        const lon = pos.coords.longitude.toFixed(6);
+                        const acc = pos.coords.accuracy.toFixed(1);
+                        status.innerHTML = `<span style='color: #34d399;'>Found: ${lat}, ${lon}. Syncing...</span>`;
+                        const targetUrl = new URL(window.parent.location.href);
+                        targetUrl.searchParams.set('gps_lat', lat);
+                        targetUrl.searchParams.set('gps_lon', lon);
+                        targetUrl.searchParams.set('gps_acc', acc);
+                        window.parent.location.href = targetUrl.toString();
+                    },
+                    function(err) {
+                        btn.disabled = false;
+                        status.innerHTML = `<span style='color: #f87171;'>Permission blocked or timed out. Use 'Instant Presets'.</span>`;
+                    },
+                    { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+                );
+            }
+            </script>
+            """,
+            height=46,
+        )
 
     st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
-    # Coordinate Display & Manual Inputs
+    # Coordinate Displays / Inputs
     c_lat, c_lon, c_acc = st.columns(3)
 
     with c_lat:
@@ -201,7 +206,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
             value=float(st.session_state["rep_lat_val"]),
             format="%.6f",
             key="rep_lat_num_input",
-            disabled=(loc_mode == "🛰️ Select Monitored Station"),
+            disabled=(loc_mode != "✍️ Manual Coordinate Entry"),
         )
     with c_lon:
         rep_lon = st.number_input(
@@ -211,7 +216,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
             value=float(st.session_state["rep_lon_val"]),
             format="%.6f",
             key="rep_lon_num_input",
-            disabled=(loc_mode == "🛰️ Select Monitored Station"),
+            disabled=(loc_mode != "✍️ Manual Coordinate Entry"),
         )
     with c_acc:
         rep_acc = st.number_input(
@@ -221,15 +226,15 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
             value=float(st.session_state["rep_acc_val"]),
             format="%.1f",
             key="rep_acc_num_input",
-            disabled=(loc_mode == "🛰️ Select Monitored Station"),
+            disabled=(loc_mode != "✍️ Manual Coordinate Entry"),
         )
 
-    # Keep session state updated with the rendered input values
+    # Sync any manual changes
     st.session_state["rep_lat_val"] = rep_lat
     st.session_state["rep_lon_val"] = rep_lon
     st.session_state["rep_acc_val"] = rep_acc
 
-    # Real-time locality lookup via Nominatim
+    # Reverse Geocoding via OpenStreetMap Nominatim
     loc_name_api = get_location_name(rep_lat, rep_lon, use_api=True)
     coord_str = f"{rep_lat:.6f}° N, {rep_lon:.6f}° E"
     is_in_district = is_within_mizoram(rep_lat, rep_lon, loc_name_api)
@@ -265,7 +270,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
         unsafe_allow_html=True,
     )
 
-    # Satellite Map Location Preview Pin (Dynamic Key forces instant re-centering)
+    # Satellite Map Location Preview Pin (Key includes coordinates so it re-centers immediately)
     with st.expander("🗺️ Preview Selected Location on Satellite Map", expanded=True):
         fig_preview = go.Figure()
         fig_preview.add_trace(
@@ -285,7 +290,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
             mapbox=dict(
                 style="white-bg",
                 center=dict(lat=rep_lat, lon=rep_lon),
-                zoom=13.0,
+                zoom=12.0,
                 layers=[
                     {
                         "below": "traces",
@@ -306,7 +311,7 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
                 ],
             ),
             margin=dict(l=0, r=0, t=0, b=0),
-            height=260,
+            height=240,
             paper_bgcolor="#070a12",
             plot_bgcolor="#070a12",
         )
@@ -324,9 +329,8 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
                             LOCATION OUTSIDE DISTRICT JURISDICTION — ENTRY BLOCKED
                         </div>
                         <div style="font-size: 0.85rem; color: #fecaca; margin-top: 5px; line-height: 1.55;">
-                            Detected coordinates <strong>({coord_str})</strong> resolve to <strong style="color: #ffffff;">{display_title}</strong>, which is outside the active <strong>Aizawl District &amp; Mizoram State</strong> disaster monitoring perimeter.<br>
-                            Ground hazard crowdsourcing is calibrated exclusively for the monitored Aizawl slope failure grid. 
-                            To submit a report or test the platform, select <strong>'🛰️ Select Monitored Station'</strong> above or click <strong>Reset to Aizawl Grid</strong> below.
+                            Detected coordinates <strong>({coord_str})</strong> resolve to <strong style="color: #ffffff;">{display_title}</strong>, which is outside the active <strong>Aizawl District &amp; Mizoram State</strong> monitoring boundary.<br>
+                            To test reporting, select <strong>'🛰️ Monitored Station'</strong> or choose an <strong>Aizawl Preset</strong> above.
                         </div>
                     </div>
                 </div>
@@ -339,9 +343,11 @@ def render_report_hazard_view(latest_df: pd.DataFrame):
         with c_rst1:
             st.caption("Reset location to Aizawl monitoring station:")
         with c_rst2:
-            st.button("📍 Reset to Aizawl Grid", key="btn_reset_to_aizawl", on_click=cb_reset_to_aizawl, width="stretch")
+            if st.button("📍 Reset to Aizawl Grid", key="btn_reset_to_aizawl", width="stretch"):
+                set_coords(23.738800, 92.696300, 5.0)
+                st.rerun()
 
-    # Step 3: Hazard Details & Submission
+    # Step 3: Hazard details & Submit
     st.markdown("#### 03. Hazard Classification & Details")
 
     with st.form("dedicated_citizen_report_form"):
