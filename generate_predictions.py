@@ -161,8 +161,30 @@ def run_predictions(as_of_date=None):
 
 if __name__ == "__main__":
     from datetime import date, timedelta
+    import pandas as pd
+    from pathlib import Path
+    from config import DAILY_RAINFALL_LOG_CSV
     
-    print("--- MASS BACKFILL: JAN 1 to SEPT 19 ---")
+    print("--- 1. PURGING OLD DATA (Before Jan 1, 2026) ---")
+    
+    # 1a. Purge Prediction History
+    if ALL_PREDICTIONS_PATH.exists():
+        df_pred = pd.read_csv(ALL_PREDICTIONS_PATH)
+        original_len = len(df_pred)
+        df_pred = df_pred[df_pred["date"] >= "2026-01-01"]
+        df_pred.to_csv(ALL_PREDICTIONS_PATH, index=False)
+        print(f"Purged {original_len - len(df_pred)} old rows from {ALL_PREDICTIONS_PATH.name}")
+
+    # 1b. Purge Rainfall Log
+    log_path = Path(DAILY_RAINFALL_LOG_CSV)
+    if log_path.exists():
+        df_log = pd.read_csv(log_path)
+        original_len = len(df_log)
+        df_log = df_log[df_log["date"] >= "2026-01-01"]
+        df_log.to_csv(log_path, index=False)
+        print(f"Purged {original_len - len(df_log)} old rows from {log_path.name}")
+        
+    print("\n--- 2. MASS BACKFILL: JAN 1 to SEPT 19, 2026 ---")
     start_date = date(2026, 1, 1)
     end_date = date(2026, 9, 19)
     
@@ -170,12 +192,10 @@ if __name__ == "__main__":
     while current_date <= end_date:
         print(f"Processing: {current_date}")
         try:
-            # Generate pipeline features and predictions for this specific date
             run_predictions(as_of_date=current_date)
         except Exception as e:
             print(f"Skipped {current_date}: {e}")
             
         current_date += timedelta(days=1)
         
-    print("--- BACKFILL COMPLETE. RUNNING STANDARD CYCLE ---")
-    run_predictions()
+    print("--- CLEANUP AND BACKFILL COMPLETE ---")
