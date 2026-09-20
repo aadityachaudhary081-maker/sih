@@ -160,15 +160,22 @@ def run_predictions(as_of_date=None):
 
 
 if __name__ == "__main__":
-    from datetime import date
+    from datetime import date, timedelta
     
-    # 1. Backfill the missing 18th
-    print("--- BACKFILLING SEPT 18 ---")
-    try:
-        run_predictions(as_of_date=date(2026, 9, 18))
-    except Exception as e:
-        print(f"Backfill failed: {e}")
+    print("--- MASS BACKFILL: JAN 1 to SEPT 19 ---")
+    start_date = date(2026, 1, 1)
+    end_date = date(2026, 9, 19)
+    
+    current_date = start_date
+    while current_date <= end_date:
+        print(f"Processing: {current_date}")
+        try:
+            # Generate pipeline features and predictions for this specific date
+            run_predictions(as_of_date=current_date)
+        except Exception as e:
+            print(f"Skipped {current_date}: {e}")
+            
+        current_date += timedelta(days=1)
         
-    # 2. Run the normal current cycle
-    print("--- RUNNING CURRENT CYCLE ---")
+    print("--- BACKFILL COMPLETE. RUNNING STANDARD CYCLE ---")
     run_predictions()
