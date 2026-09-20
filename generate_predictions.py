@@ -160,4 +160,15 @@ def run_predictions(as_of_date=None):
 
 
 if __name__ == "__main__":
+    from datetime import date
+    
+    # 1. Backfill the missing 18th
+    print("--- BACKFILLING SEPT 18 ---")
+    try:
+        run_predictions(as_of_date=date(2026, 9, 18))
+    except Exception as e:
+        print(f"Backfill failed: {e}")
+        
+    # 2. Run the normal current cycle
+    print("--- RUNNING CURRENT CYCLE ---")
     run_predictions()
