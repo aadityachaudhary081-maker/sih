@@ -5,7 +5,7 @@
   "total_prediction_records": 13764,
   "warnings": 167,
   "no_warnings": 252,
-  "mean_landslide_probability": 0.4304207470979816,
-  "prediction_timestamp_utc": "2026-10-13T17:35:36.848540+00:00",
+  "mean_landslide_probability": 0.43042074709798167,
+  "prediction_timestamp_utc": "2026-10-13T22:40:23.183825+00:00",
   "phase": 9
 }
